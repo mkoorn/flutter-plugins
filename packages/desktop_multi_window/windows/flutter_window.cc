@@ -24,7 +24,8 @@ int32_t class_registered_ = 0;
 
 void RegisterWindowClass(WNDPROC wnd_proc) {
   if (class_registered_ == 0) {
-    WNDCLASS window_class{};
+    WNDCLASSEX window_class{};
+    window_class.cbSize = sizeof(WNDCLASSEX);
     window_class.hCursor = LoadCursor(nullptr, IDC_ARROW);
     window_class.lpszClassName = kFlutterWindowClassName;
     window_class.style = CS_HREDRAW | CS_VREDRAW;
@@ -32,11 +33,12 @@ void RegisterWindowClass(WNDPROC wnd_proc) {
     window_class.cbWndExtra = 0;
     window_class.hInstance = GetModuleHandle(nullptr);
     window_class.hIcon =
-        LoadIcon(window_class.hInstance, IDI_APPLICATION);
+        LoadIcon(window_class.hInstance, MAKEINTRESOURCE(101)); // Use main app icon (IDI_APP_ICON=101)
+    window_class.hIconSm = LoadIcon(window_class.hInstance, MAKEINTRESOURCE(101)); // Use main app icon (IDI_APP_ICON=101)
     window_class.hbrBackground = (HBRUSH) (COLOR_WINDOW + 1);
     window_class.lpszMenuName = nullptr;
     window_class.lpfnWndProc = wnd_proc;
-    RegisterClass(&window_class);
+    RegisterClassEx(&window_class);
   }
   class_registered_++;
 }
