@@ -8,6 +8,8 @@
 
 #include "tchar.h"
 
+#include <dwmapi.h>
+
 #include <iostream>
 #include <utility>
 
@@ -22,8 +24,19 @@ TCHAR kFlutterWindowClassName[] = _T("FlutterMultiWindow");
 
 int32_t class_registered_ = 0;
 
+// Background brush for the window class client area. The default WHITE brush
+// (COLOR_WINDOW) paints a white rectangle over the client area for the 1-2s the
+// heavy Flutter window takes to render its first frame, which reads as a white
+// flash. This brush matches the host app's dark Material theme surface color
+// (lib/src/ui/main_window/app_theme.dart, _surface = Color(0xFF0C0E0C) =
+// RGB(12, 14, 12)) so the build-latency gap is seamless dark, not white.
+// Owned for the lifetime of the registered class; released in
+// UnregisterWindowClass when the last window goes away.
+HBRUSH background_brush_ = nullptr;
+
 void RegisterWindowClass(WNDPROC wnd_proc) {
   if (class_registered_ == 0) {
+    background_brush_ = CreateSolidBrush(RGB(12, 14, 12));
     WNDCLASSEX window_class{};
     window_class.cbSize = sizeof(WNDCLASSEX);
     window_class.hCursor = LoadCursor(nullptr, IDC_ARROW);
@@ -35,7 +48,7 @@ void RegisterWindowClass(WNDPROC wnd_proc) {
     window_class.hIcon =
         LoadIcon(window_class.hInstance, MAKEINTRESOURCE(101)); // Use main app icon (IDI_APP_ICON=101)
     window_class.hIconSm = LoadIcon(window_class.hInstance, MAKEINTRESOURCE(101)); // Use main app icon (IDI_APP_ICON=101)
-    window_class.hbrBackground = (HBRUSH) (COLOR_WINDOW + 1);
+    window_class.hbrBackground = background_brush_;
     window_class.lpszMenuName = nullptr;
     window_class.lpfnWndProc = wnd_proc;
     RegisterClassEx(&window_class);
@@ -49,6 +62,10 @@ void UnregisterWindowClass() {
     return;
   }
   UnregisterClass(kFlutterWindowClassName, nullptr);
+  if (background_brush_ != nullptr) {
+    DeleteObject(background_brush_);
+    background_brush_ = nullptr;
+  }
 }
 
 // Scale helper to convert logical scaler values to physical using passed in
@@ -95,6 +112,13 @@ FlutterWindow::FlutterWindow(
       Scale(target_point.x, scale_factor_), Scale(target_point.y, scale_factor_),
       Scale(1280, scale_factor_), Scale(720, scale_factor_),
       nullptr, nullptr, GetModuleHandle(nullptr), this);
+
+  // Make the non-client area (title bar) dark to match the dark client-area
+  // brush, mirroring the host runner's UpdateTheme. Best-effort: older Windows
+  // builds lacking the attribute simply ignore it.
+  BOOL enable_dark_mode = TRUE;
+  DwmSetWindowAttribute(window_handle, DWMWA_USE_IMMERSIVE_DARK_MODE,
+                        &enable_dark_mode, sizeof(enable_dark_mode));
 
   RECT frame;
   GetClientRect(window_handle, &frame);
